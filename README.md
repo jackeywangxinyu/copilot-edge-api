@@ -2,21 +2,6 @@
 
 使用你已经在 Edge 中登录好的企业 SSO 账号。本服务不登录、不切换任何账号。默认端口 `8787`，默认 Playwright CLI 会话 `msedge`。
 
-## 验证范围（2026-11-04，日本时间）
-
-已经在独立的云端浏览器（与你的企业账号无关）中验证页面结构：
-
-- 进入 `https://copilot.cloud.microsoft/chat`。
-- 人工完成首次发送触发的验证码后，收到 `COPILOT_API_TEST_7319`。
-- 连续发送原问题 `What is the weather in Tokyo today? Please answer in Chinese.`，收到完整中文回答。
-- 再次发送相同校验问题，收到第三条独立回答。
-- 再发送带换行的中文校验问题，收到第四条独立回答 `COPILOT_HTTP_MULTILINE_8462`。
-- 确认实际 DOM 的输入框、发送按钮、用户消息、回答正文和回答完成控件。
-
-已在代码运行环境验证：15 项 HTTP 接口、浏览器驱动决策和请求生命周期的模拟测试，全部通过。模拟测试不能证明真实网页发送成功。
-
-**尚未完成：在你的 Windows 11 + Edge 上执行这份 API 的端到端验收。当前环境不能操作你的 Windows。云端登录不会把登录状态带到你本机。**
-
 ## 1. 准备你本机已有的 Edge
 
 使用你此前已经连接成功的 Edge，打开 `https://copilot.cloud.microsoft/chat`。只保留一个 Copilot 标签页，其他普通网页无需关闭。
@@ -44,21 +29,15 @@ npx.cmd playwright cli -s=msedge attach --cdp=msedge
 
 看到 `Copilot Edge API: http://127.0.0.1:8787` 后保留窗口。如果出现找不到可附加 Edge 的错误，说明本机的 CLI 还未连接到 Edge；服务不会另开一个空白登录配置。需要恢复此前已成功的本机连接方式。现有 CLI 与新目录的 CLI 若不能共享命名会话，也需要在本目录重新 attach，但这仍然连接原 Edge，不重建登录。
 
-## 3. 完整端到端验收
+## 3. 测试
 
 另开一个 PowerShell，在同一目录运行：
 
 ```powershell
-node .\smoke.mjs
+npm test
 ```
 
-它会测试 `/chat`、同一 request_id 的结果复用，以及 `/v1/chat/completions`，真实发送两条随机校验消息。只有收到匹配的 Copilot 回答才打印：
-
-```text
-PASS: HTTP -> Playwright CLI -> existing Edge -> Copilot -> answer -> HTTP
-```
-
-**这行由你本机运行产生，才是 Windows 全链路验收通过。** 脚本不会仅因按钮点击、输入框清空或 HTTP 200 就判为成功。
+它通过 API 真实发送一个问题：今天东京天气怎么样。收到回答就打印回答；失败时打印 `FAIL` 和错误内容，并以非零状态退出。
 
 ## 4. 业务调用
 
@@ -145,5 +124,3 @@ const response = await fetch('http://127.0.0.1:8787/chat', {
 - 必须看到新用户消息、新回答正文、该回答自己的复制控件、生成结束和短暂稳定，才返回 completed。
 - 没有 20 字最小限制或 4000 字截断，短回答也可完成。
 - 验证码只检测并报告，不尝试绕过。
-
-运行代码测试：`npm test`。测试使用模拟网页状态；实际验收使用 `node smoke.mjs`。

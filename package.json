@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {"start":"node server.mjs","test":"node --test test/*.test.mjs"},
+  "scripts": {"start":"node server.mjs","test":"node test.mjs"},
   "engines": {"node": ">=20"},
   "dependencies": {"playwright":"1.62.1"}
 }
