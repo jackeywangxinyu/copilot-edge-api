@@ -1,13 +1,12 @@
 # Copilot 网页 → Playwright CLI → 本地 HTTP API
 
-指定账号：由环境变量 `COPILOT_EXPECTED_ACCOUNT` 设置（必填，例如 `you@example.com`）。默认端口 `8787`，默认 Playwright CLI 会话 `msedge`。
+使用你已经在 Edge 中登录好的企业 SSO 账号。本服务不登录、不切换任何账号。默认端口 `8787`，默认 Playwright CLI 会话 `msedge`。
 
 ## 验证范围（2026-11-04，日本时间）
 
-已经在独立的云端浏览器中验证：
+已经在独立的云端浏览器（与你的企业账号无关）中验证页面结构：
 
-- Microsoft 邮箱验证码登录、进入 `https://copilot.cloud.microsoft/chat`。
-- 账号菜单确认为 `you@example.com`，显示为个人帐户。
+- 进入 `https://copilot.cloud.microsoft/chat`。
 - 人工完成首次发送触发的验证码后，收到 `COPILOT_API_TEST_7319`。
 - 连续发送原问题 `What is the weather in Tokyo today? Please answer in Chinese.`，收到完整中文回答。
 - 再次发送相同校验问题，收到第三条独立回答。
@@ -22,7 +21,7 @@
 
 使用你此前已经连接成功的 Edge，打开 `https://copilot.cloud.microsoft/chat`。只保留一个 Copilot 标签页，其他普通网页无需关闭。
 
-在左下角账号菜单确认登录的是 `you@example.com`。如果当前是企业账号，本服务会返回 `ACCOUNT_MISMATCH`，不会代用其他账号。登录、邮件验证码和人机验证在 Edge 页面完成。
+Edge 必须已用企业 SSO 账号登录，并已开启远程调试（例如启动参数 `--remote-debugging-port=9222`）。本服务只使用这个已登录的浏览器，不会登录任何其他账号。登录和人机验证在 Edge 页面由你完成。若设置了可选的 `COPILOT_EXPECTED_ACCOUNT`，每个新任务前会核对账号菜单中的邮箱，不一致则返回 `ACCOUNT_MISMATCH`；不设置则不核对。
 
 这份代码只附加到已有 Edge。没有 `launchPersistentContext`，不会创建 `.copilot-browser` 或切到 Chrome。
 
@@ -31,7 +30,7 @@
 将整个文件夹解压到一个固定目录，在这个目录的 PowerShell 中运行：
 
 ```powershell
-$env:COPILOT_EXPECTED_ACCOUNT = "you@example.com"
+$env:COPILOT_CDP = "http://127.0.0.1:9222"   # 你的 Edge 远程调试地址
 .\start.cmd
 ```
 
@@ -127,8 +126,8 @@ const response = await fetch('http://127.0.0.1:8787/chat', {
 | --- | --- | --- |
 | `PORT` | `8787` | 本机 API 端口 |
 | `COPILOT_SESSION` | `msedge` | Playwright CLI 会话名 |
-| `COPILOT_CDP` | `msedge` | 已运行浏览器的 channel 或你已有的 CDP 地址 |
-| `COPILOT_EXPECTED_ACCOUNT` | 无（必填） | 每次新任务前核对的邮箱 |
+| `COPILOT_CDP` | `msedge` | 已运行 Edge 的 channel，或远程调试地址，例如 `http://127.0.0.1:9222` |
+| `COPILOT_EXPECTED_ACCOUNT` | 空（不核对） | 可选。设置后，每次新任务前核对已登录账号的邮箱 |
 | `COPILOT_TAB_URL` | 空 | 有多个标签页时精确指定 URL；推荐只保留一个 Copilot 标签页，避免导航后 URL 改变 |
 | `COPILOT_TIMEOUT_MS` | `180000` | 每次等待回答的上限 |
 | `COPILOT_API_KEY` | 空 | 可选的本机 Bearer token；配置后所有接口均要求 Authorization |

@@ -109,10 +109,13 @@ export function createBridge({invoke,origin='https://copilot.cloud.microsoft',ta
     active=job.id;job.state='running';job.error=null;
     try{
       if(!job.before){
-        const account=await invoke(config('account',{expectedAccount}));
-        const accountError=errorFor(account);
-        if(accountError){job.state='blocked';job.error=accountError;return;}
-        if(account.state!=='account_verified')throw new BridgeError('ACCOUNT_UNVERIFIED','Account verification did not complete.');
+        // Optional guard: only checked when COPILOT_EXPECTED_ACCOUNT is set. The bridge never signs in itself.
+        if(expectedAccount){
+          const account=await invoke(config('account',{expectedAccount}));
+          const accountError=errorFor(account);
+          if(accountError){job.state='blocked';job.error=accountError;return;}
+          if(account.state!=='account_verified')throw new BridgeError('ACCOUNT_UNVERIFIED','Account verification did not complete.');
+        }
         const result=await invoke(config('send',{prompt:job.prompt}));
         const problem=errorFor(result);
         if(problem){job.state='blocked';job.error=problem;return;}
@@ -201,7 +204,6 @@ export function createBridge({invoke,origin='https://copilot.cloud.microsoft',ta
 }
 
 async function main(){
-  if(!process.env.COPILOT_EXPECTED_ACCOUNT)throw new BridgeError('ACCOUNT_NOT_CONFIGURED','Set COPILOT_EXPECTED_ACCOUNT to the email of the Copilot account signed in to Edge.');
   const cli=await createCli({cwd:ROOT});
   const base={origin:'https://copilot.cloud.microsoft',url:process.env.COPILOT_TAB_URL||undefined,op:'status'};
   let state;
