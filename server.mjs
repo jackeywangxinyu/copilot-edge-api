@@ -1,6 +1,6 @@
 import http from 'node:http';
-import {spawn} from 'node:child_process';
-import {createRequire} from 'node:module';
+import {execSync,spawn} from 'node:child_process';
+import {existsSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -29,15 +29,20 @@ export function parseCli(text) {
   throw new BridgeError('CLI_RESULT_INVALID','Playwright CLI did not return a bridge result. Check the CLI session and version.');
 }
 
+// Playwright CLI is a global npm package. This project installs nothing locally.
+export function findCli() {
+  if (process.env.COPILOT_CLI_JS) return resolve(process.env.COPILOT_CLI_JS);
+  let root='';
+  try {root=execSync('npm root -g',{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','ignore']}).trim();}
+  catch {}
+  const cliPath=join(root,'playwright','cli.js');
+  if (!root||!existsSync(cliPath)) throw new BridgeError('CLI_MISSING','Run once: npm install -g playwright@1.62.1',503);
+  return cliPath;
+}
+
 export async function createCli({cwd=ROOT,session=process.env.COPILOT_SESSION||'msedge',
   target=process.env.COPILOT_CDP||'msedge',cliTimeout=60000}={}) {
-  const req = createRequire(join(cwd,'package.json'));
-  let cliPath;
-  if (process.env.COPILOT_CLI_JS) cliPath=resolve(process.env.COPILOT_CLI_JS);
-  else {
-    try {cliPath=join(dirname(req.resolve('playwright/package.json')),'cli.js');}
-    catch {throw new BridgeError('CLI_MISSING','Run npm install in this directory first.',503);}
-  }
+  const cliPath = findCli();
   const scratch = await mkdtemp(join(tmpdir(),'copilot-edge-api-'));
   const env = {...process.env};
   // A stale implicit endpoint can override the explicitly selected session.

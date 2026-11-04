@@ -7,8 +7,11 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if not exist node_modules\playwright\cli.js (
-  call npm.cmd install --no-audit --no-fund
+set "NPM_ROOT="
+for /f "delims=" %%i in ('npm.cmd root -g') do set "NPM_ROOT=%%i"
+if not exist "%NPM_ROOT%\playwright\cli.js" (
+  echo Installing Playwright CLI globally. This runs only once.
+  call npm.cmd install -g playwright@1.62.1 --no-audit --no-fund
   if errorlevel 1 (
     pause
     exit /b 1

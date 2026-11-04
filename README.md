@@ -19,12 +19,12 @@ $env:COPILOT_CDP = "http://127.0.0.1:9222"   # 你的 Edge 远程调试地址
 .\start.cmd
 ```
 
-首次运行安装本地 Playwright CLI 依赖；不安装额外的浏览器。之后调用的实际入口是 `node node_modules\playwright\cli.js cli ...`，不把提示词交给 PowerShell/CMD。
+Playwright CLI 使用全局安装，项目目录不安装任何依赖，也不安装额外的浏览器。`start.cmd` 只在全局没有 Playwright 时安装一次（`npm install -g playwright@1.62.1`），之后不再安装。实际入口是全局的 `playwright\cli.js cli ...`，不把提示词交给 PowerShell/CMD。
 
 启动器先尝试读取 `msedge` 会话；不存在时调用对应命令：
 
 ```powershell
-npx.cmd playwright cli -s=msedge attach --cdp=msedge
+playwright cli -s=msedge attach --cdp=msedge
 ```
 
 看到 `Copilot Edge API: http://127.0.0.1:8787` 后保留窗口。如果出现找不到可附加 Edge 的错误，说明本机的 CLI 还未连接到 Edge；服务不会另开一个空白登录配置。需要恢复此前已成功的本机连接方式。现有 CLI 与新目录的 CLI 若不能共享命名会话，也需要在本目录重新 attach，但这仍然连接原 Edge，不重建登录。
@@ -110,7 +110,7 @@ const response = await fetch('http://127.0.0.1:8787/chat', {
 | `COPILOT_TAB_URL` | 空 | 有多个标签页时精确指定 URL；推荐只保留一个 Copilot 标签页，避免导航后 URL 改变 |
 | `COPILOT_TIMEOUT_MS` | `180000` | 每次等待回答的上限 |
 | `COPILOT_API_KEY` | 空 | 可选的本机 Bearer token；配置后所有接口均要求 Authorization |
-| `COPILOT_CLI_JS` | 本地 Playwright 的 cli.js | 可选的既有 Playwright CLI JS 入口；此入口须支持 `cli` 子命令 |
+| `COPILOT_CLI_JS` | 全局 Playwright 的 cli.js | 可选的既有 Playwright CLI JS 入口；此入口须支持 `cli` 子命令 |
 
 服务仅监听 `127.0.0.1`，拒绝带 Origin 的跨站网页请求。相同时间仅运行一个网页任务；其他提示词返回 `BUSY`。发送期间请勿手动更改聊天、切换账号或发送别的问题。API 保留当前网页的历史上下文；开始独立任务前，在 Edge 新建聊天并确保输入框为空。
 
