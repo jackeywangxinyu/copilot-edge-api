@@ -1,6 +1,5 @@
 import http from 'node:http';
-import {execSync,spawn} from 'node:child_process';
-import {existsSync} from 'node:fs';
+import {spawn} from 'node:child_process';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -10,6 +9,9 @@ import browserFlow from './browser-flow.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const delay = ms => new Promise(r=>setTimeout(r,ms));
+const CLI = 'playwright-cli';
+const CLI_INSTALL = 'npm install -g @playwright/cli@0.1.23';
+const ORIGIN = process.env.COPILOT_ORIGIN || 'https://copilot.cloud.microsoft';
 export class BridgeError extends Error {
   constructor(code,message,status=502,extra={}) {super(message);Object.assign(this,{code,status,extra});}
 }
@@ -29,28 +31,19 @@ export function parseCli(text) {
   throw new BridgeError('CLI_RESULT_INVALID','Playwright CLI did not return a bridge result. Check the CLI session and version.');
 }
 
-// Playwright CLI is a global npm package. This project installs nothing locally.
-export function findCli() {
-  if (process.env.COPILOT_CLI_JS) return resolve(process.env.COPILOT_CLI_JS);
-  let root='';
-  try {root=execSync('npm root -g',{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','ignore']}).trim();}
-  catch {}
-  const cliPath=join(root,'playwright','cli.js');
-  if (!root||!existsSync(cliPath)) throw new BridgeError('CLI_MISSING','Run once: npm install -g playwright@1.62.1',503);
-  return cliPath;
-}
+// Windows installs a global npm command as a .cmd file, which runs only through a shell.
+const spawnCli = (args,options) => process.platform==='win32'
+  ? spawn(`${CLI}.cmd`,args.map(a=>`"${a}"`),{...options,shell:true})
+  : spawn(CLI,args,{...options,shell:false});
 
 export async function createCli({cwd=ROOT,session=process.env.COPILOT_SESSION||'msedge',
   target=process.env.COPILOT_CDP||'msedge',cliTimeout=60000}={}) {
-  const cliPath = findCli();
   const scratch = await mkdtemp(join(tmpdir(),'copilot-edge-api-'));
   const env = {...process.env};
   // A stale implicit endpoint can override the explicitly selected session.
   delete env.PLAYWRIGHT_CLI_SESSION;
-  const command = args => new Promise((resolveCommand,reject)=>{
-    const child=spawn(process.execPath,[cliPath,'cli',`-s=${session}`,...args],{
-      cwd,env,windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']
-    });
+  const run = args => new Promise((resolveCommand,reject)=>{
+    const child=spawnCli(args,{cwd,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
     let out='',err='',settled=false;
     const fail=e=>{if(!settled){settled=true;clearTimeout(timer);reject(e);}};
     const timer=setTimeout(()=>{child.kill();fail(new BridgeError('CLI_TIMEOUT','CLI timed out; submission may already have occurred. Do not blindly retry.',504));},cliTimeout);
@@ -65,6 +58,11 @@ export async function createCli({cwd=ROOT,session=process.env.COPILOT_SESSION||'
       else resolveCommand(out);
     });
   });
+  const command=args=>run([`-s=${session}`,...args]);
+  const version=async()=>{
+    try {return (await run(['--version'])).trim();}
+    catch(e) {throw new BridgeError('CLI_MISSING',`Install the global command once: ${CLI_INSTALL} (${e.message})`,503);}
+  };
   const invoke=async cfg=>{
     const file=join(scratch,`${randomUUID()}.js`);
     const code=`async (page) => ({bridge_version:1,data:await (${browserFlow.toString()})(page,${JSON.stringify(cfg)})})`;
@@ -73,10 +71,17 @@ export async function createCli({cwd=ROOT,session=process.env.COPILOT_SESSION||'
     finally {await rm(file,{force:true});}
   };
   const attach=async()=>{await command(['attach',`--cdp=${target}`]);};
-  return {invoke,attach,close:()=>rm(scratch,{recursive:true,force:true})};
+  return {version,invoke,attach,close:()=>rm(scratch,{recursive:true,force:true})};
 }
 
-export function createBridge({invoke,origin='https://copilot.cloud.microsoft',tabUrl='',
+// Reads the attached browser state. Attaches first only if the session has no browser.
+export async function connect(cli) {
+  const status={op:'status',origin:ORIGIN,url:process.env.COPILOT_TAB_URL||undefined};
+  try {return await cli.invoke(status);}
+  catch {await cli.attach();return cli.invoke(status);}
+}
+
+export function createBridge({invoke,origin=ORIGIN,tabUrl='',
   timeoutMs=180000,pollMs=1200,stableMs=1800,key=process.env.COPILOT_API_KEY||'',
   expectedAccount=process.env.COPILOT_EXPECTED_ACCOUNT||''}={}) {
   if(!invoke)throw new Error('invoke is required');
@@ -210,10 +215,8 @@ export function createBridge({invoke,origin='https://copilot.cloud.microsoft',ta
 
 async function main(){
   const cli=await createCli({cwd:ROOT});
-  const base={origin:'https://copilot.cloud.microsoft',url:process.env.COPILOT_TAB_URL||undefined,op:'status'};
-  let state;
-  try{state=await cli.invoke(base);}
-  catch{await cli.attach();state=await cli.invoke(base);}
+  await cli.version();
+  const state=await connect(cli);
   const port=Number(process.env.PORT||8787);
   if(!Number.isInteger(port)||port<1||port>65535)throw new Error('Invalid PORT');
   const bridge=createBridge({invoke:cli.invoke,tabUrl:process.env.COPILOT_TAB_URL||'',timeoutMs:Number(process.env.COPILOT_TIMEOUT_MS||180000)});
